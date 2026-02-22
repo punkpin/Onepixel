@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnePixel 桌宠</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container" class="layout-container">
+
+        <div id="avatar-zone" class="avatar-area">
+             <img id="pet-image" src="./avatar.png" alt="Pet" class="hidden static-pet">
+
+            <canvas id="live2d-canvas" class="live2d-canvas"></canvas>
+
+            <div class="drag-handle" title="按住拖动桌宠">✥</div>
+
+            <div id="settings-zone" class="settings-panel hidden">
+                <h3>系统设置</h3>
+                <label>显示模式:</label>
+                <select id="display-mode-select">
+                    <option value="live2d">动态 Live2D</option>
+                    <option value="static">静态图片</option>
+                </select>
+                <button id="close-settings-btn" class="ui-btn">关闭设置</button>
+            </div>
+
+            <button id="open-settings-btn" class="icon-btn">⚙️</button>
+        </div>
+
+        <div id="chat-zone" class="transparent-chat">
+            <div id="chat-history" class="history-area"></div>
+
+            <div class="input-area">
+                <input type="text" id="chat-input" placeholder="对 OnePixel 说点什么..." autocomplete="off">
+                <button id="send-btn" class="send-btn">发送</button>
+            </div>
+        </div>
+
+    </div>
+
+    <button id="open-chat-btn" class="hidden"></button>
+    <button id="close-chat-btn" class="hidden"></button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.2/browser/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    <script src="./live2dcubismcore.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js"></script>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
