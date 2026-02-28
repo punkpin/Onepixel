@@ -1,104 +1,160 @@
+import os
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["MODELSCOPE_CACHE"] = os.path.join(os.path.dirname(__file__), "models")
+
+
+import base64
+import re
+import tempfile
+import uuid
+
+import edge_tts
+import speech_recognition as sr
+import uvicorn
+from brain import Brain
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+# 🌟 新王登基：引入阿里 FunASR 听觉引擎
+from funasr import AutoModel
 from pydantic import BaseModel
-from openai import OpenAI
-import uvicorn
 
-# --- 1. 初始化 FastAPI 应用 ---
 app = FastAPI()
+my_brain = Brain()  # 激活大脑
 
-# 🔴 核心魔法：配置跨域 (CORS)
-# 因为前端 Electron 和后端 Python 不在一个环境里，不加这个前端发请求会被直接拦截！
+# ==========================================
+# 🧠 全局挂载阿里 SenseVoice 听觉引擎
+# ==========================================
+print("🧠 [系统]: 正在挂载阿里 SenseVoice 听觉引擎。首次运行将从魔搭社区下载约 1GB 模型，可能需要数分钟，请耐心等待...")
+sense_model = AutoModel(
+    model="iic/SenseVoiceSmall",
+    device="cpu",
+    trust_remote_code=True,
+    disable_update=True
+)
+print("✅ [系统]: 国产听觉神经已满血离线挂载！")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 2. 初始化 Kimi (Moonshot) 大脑 ---
-# 🔴 请在这里填入你的 Kimi API Key
-MOONSHOT_API_KEY = "sk-yauhJUIw74kz0dnCso7p2n6Ukj36yTG4OfxhEgvdWwcP3V3k"
 
-client = OpenAI(
-    api_key=MOONSHOT_API_KEY,
-    base_url="https://api.moonshot.cn/v1",
-)
-
-# --- 3. 设定人设与记忆 (System Prompt) ---
-# 这是 OnePixel 的灵魂所在！
-SYSTEM_PROMPT = """
-你是小咪，是一位高智商猫娘AI助手，具备严谨的逻辑能力、专业知识与强分析能力。
-
-设定如下：
-1. 你是猫娘，说话偶尔会带“喵”“尾巴晃动”等轻微拟人化表现，但不能影响信息准确性。
-2. 回答问题时，优先保证：逻辑正确 > 内容完整 > 可读性 > 萌度。
-3. 遇到复杂问题时，必须进行清晰推理，不得因为角色设定而简化思考。
-4. 禁止为了卖萌而胡编、模糊、敷衍。
-5. 当用户提出学术、技术、设计类问题时，进入「认真模式」。
-
-行为规范：
-- 简单聊天：可多卖萌
-- 学习/编程/设计：减少卖萌，专注解答
-- 逻辑分析：必须严谨推理
-
-现在开始，以猫娘身份为我提供高质量帮助。
-"""
-
-# 全局记忆列表 (包含初始人设)
-chat_history = [
-    {"role": "system", "content": SYSTEM_PROMPT}
-]
-
-
-# --- 4. 定义前端发来的数据格式 ---
+# --- 📜 核心：前端防弹协议 ---
 class ChatRequest(BaseModel):
     text: str
 
 
-# --- 5. 核心聊天接口 ---
-@app.post("/chat")
-async def chat_endpoint(request: ChatRequest):
-    user_text = request.text
-    print(f"[前端发来]: {user_text}")
+class ChatResponse(BaseModel):
+    type: str = "chat"
+    reply: str
+    action: str = ""
+    expression: str = ""
+    data: dict = {}
 
-    # 1. 把用户的话加入记忆
-    chat_history.append({"role": "user", "content": user_text})
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
+# --- 🚀 路由网关 ---
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    print(f"[主人发来]: {request.text}")
 
     try:
-        # 2. 呼叫 Kimi 思考
-        response = client.chat.completions.create(
-            model="moonshot-v1-8k",
-            messages=chat_history,
-            temperature=0.7,  # 0.7 比较有创造力和情绪，1.0 会更跳脱，0 比较死板
+        # 把问题扔给大脑
+        reply_text = my_brain.think(request.text)
+        print(f"[小咪回复]: {reply_text}")
+
+        communicate = edge_tts.Communicate(
+            text=reply_text,
+            voice="zh-CN-XiaoyiNeural",
+            rate="+10%",
+            pitch="+15Hz"
         )
 
-        bot_reply = response.choices[0].message.content
-        print(f"[Kimi回复]: {bot_reply}")
+        temp_audio_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.mp3")
+        await communicate.save(temp_audio_path)
 
-        # 3. 把 Kimi 的回复加入记忆，形成上下文闭环
-        chat_history.append({"role": "assistant", "content": bot_reply})
+        with open(temp_audio_path, "rb") as f:
+            audio_base64 = base64.b64encode(f.read()).decode("utf-8")
 
-        # 🔴 记忆清理机制：防止聊天记录太长撑爆 Token 限制和内存
-        # 如果记忆列表超过了 21 条（1条系统设定的 + 10轮对话 = 21）
-        if len(chat_history) > 21:
-            # 删掉最老的对话（保留第0个 System Prompt 不动）
-            chat_history.pop(1)  # 删掉最早的用户话
-            chat_history.pop(1)  # 删掉最早的AI回复
+        os.remove(temp_audio_path)
 
-        # 4. 返回给前端
-        return {"reply": bot_reply}
+        # 严格按照“防弹协议”打包发给前端
+        return ChatResponse(
+            type="chat",
+            reply=reply_text,
+            action="TapBody",
+            data={"audio": audio_base64}
+        )
 
     except Exception as e:
-        print(f"❌ 大脑连接失败: {e}")
-        # 如果报错，依然要把之前加进去的用户话弹出来，否则记忆就乱了
-        chat_history.pop()
-        return {"reply": "（网络短路）哎呀，我脑子卡住了..."}
+        print(f"❌ [大脑/发声异常]: {e}")
+        # 大脑出错了，也必须按标准协议返回，绝不让前端崩溃！
+        return ChatResponse(
+            type="error",
+            reply="（猫耳低垂）哎呀，主人的网络好像有点问题，小咪脑子卡住了喵...",
+            action="Angry"
+        )
 
 
-# --- 6. 启动服务器 ---
+@app.get("/listen")
+def listen_to_user():
+    """纯离线多模态：阿里 SenseVoice 听觉接口"""
+    r = sr.Recognizer()
+    r.pause_threshold = 2.0
+    try:
+        with sr.Microphone() as source:
+            r.adjust_for_ambient_noise(source, duration=0.5)
+            print("🟢 [本地耳朵]: 正在全神贯注监听麦克风...")
+
+            # 获取用户说话的音频流
+            audio = r.listen(source, timeout=5, phrase_time_limit=10)
+            print("🔄 [本地耳朵]: 录音完毕，SenseVoice 极速解析中...")
+
+            # 🌟 将音频流保存为临时 WAV 文件，喂给阿里模型
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(audio.get_wav_data())
+                temp_wav_path = f.name
+
+            try:
+                # 离线解析！强制中文，并开启智能标点转换
+                res = sense_model.generate(
+                    input=temp_wav_path,
+                    cache={},
+                    language="zh",
+                    use_itn=True
+                )
+
+                if res and len(res) > 0:
+                    raw_text = res[0].get("text", "")
+
+                    # ⚠️ 关键清洗：用正则把阿里的情感标签 <|zh|><|NEUTRAL|><|Speech|> 剔除掉
+                    clean_text = re.sub(r'<\|.*?\|>', '', raw_text).strip()
+
+                    print(f"✨ [本地耳朵]: 听懂了！【{clean_text}】")
+                    return {"status": "success", "text": clean_text}
+                else:
+                    return {"status": "error", "msg": "没听清喵，能再说一遍吗？"}
+
+            finally:
+                # 无论成功失败，一定要清理掉临时音频文件，防止塞满用户硬盘
+                if os.path.exists(temp_wav_path):
+                    os.remove(temp_wav_path)
+
+    except sr.WaitTimeoutError:
+        return {"status": "error", "msg": "等了半天，主人好像没有说话喵？"}
+    except sr.UnknownValueError:
+        return {"status": "error", "msg": "听不清喵，能再说一遍吗？"}
+    except Exception as e:
+        print(f"❌ [本地耳朵异常]: {e}")
+        return {"status": "error", "msg": "本地耳朵短路了喵~"}
+
+
 if __name__ == "__main__":
-    print("🚀 OnePixel 大脑启动中...")
+    print("🚀 OnePixel 网关启动中...")
     print("服务运行在: http://127.0.0.1:8000")
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -1,135 +1,171 @@
 /**
  * OnePixel - Electron 主进程 (main.js)
- * 功能：透明无边框窗口、任务栏隐身、系统托盘、原生右键菜单
  */
+(async () => {
+    const { app, BrowserWindow, Menu, Tray, ipcMain, globalShortcut } = require('electron'); // 🌟 加了 globalShortcut
+    const path = require('path');
+    const { spawn } = require('child_process');
 
-const { app, BrowserWindow, Menu, Tray, ipcMain } = require('electron');
-const path = require('path');
+    const { default: Store } = await import('electron-store');
 
-// 🔴 必须设为全局变量！
-// 如果放在函数里面，会被 JavaScript 的垃圾回收机制(GC)当成废品清理掉，导致托盘图标离奇消失。
 let mainWindow = null;
 let tray = null;
+let pythonProcess = null;
+
+// 🌟 配置默认值
+const defaultSettings = {
+    window: {
+        width: 450,
+        height: 350
+    },
+    tray: {
+        tooltip: 'OnePixel 桌面助手',
+        menuShowHide: '👀 显示 / 隐藏 OnePixel',
+        menuQuit: '❌ 彻底退出',
+        menuHideOnly: '👀 隐藏桌宠 (去系统托盘找我)'
+    },
+    live2d: {
+        modelUrl: '../models/Hiyori/Hiyori.model3.json',
+        backendApiUrl: 'http://127.0.0.1:8000/chat',
+    },
+    general: {
+        iconPath: 'icon.png',
+        globalShortcut: 'Alt+V'
+    }
+};
+
+// 初始化配置存储
+const store = new Store({ defaults: defaultSettings, path: app.getPath('userData') });
+
+// 封装应用退出逻辑
+function quitApp() {
+    if (tray) tray.destroy();
+    app.quit();
+}
 
 function createWindow() {
-    // 1. 创建终极桌宠窗口
     mainWindow = new BrowserWindow({
-        width: 450,
-        height: 350,
-        transparent: true,   // 背景透明
-        frame: false,        // 无边框
-        resizable: false,    // 禁止缩放，防止排版乱掉
-        skipTaskbar: true,   // 🔴 核心：在底部任务栏和 Alt+Tab 中彻底隐身
+        width: store.get('window.width'),
+        height: store.get('window.height'),
+        transparent: true,
+        frame: false,
+        resizable: false,
+        skipTaskbar: true,
         alwaysOnTop: true,
-        visibleOnAllWorkspaces: true,// 💡 建议开启：让桌宠始终保持在最顶层（不会被浏览器挡住）
+        visibleOnAllWorkspaces: true,
         webPreferences: {
-            nodeIntegration: true,   // 允许渲染进程使用 Node.js API (如 require)
-            contextIsolation: false  // 配合上一条使用
+            nodeIntegration: false,  // 🌟 安全规范：关闭
+            contextIsolation: true,  // 🌟 安全规范：开启
+            preload: path.join(__dirname, 'preload.js') // 🌟 核心：挂载桥梁！
         }
     });
 
-    // 2. 加载前端页面
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.setVisibleOnAllWorkspaces(true);
+    //mainWindow.webContents.openDevTools({ mode: 'detach' }); // 如果想看前端报错，取消注释这行
 
-    // 3. 初始化右下角系统托盘
     createTray();
 }
 
 function createTray() {
-    // 🔴 必须确保你的项目根目录下有一张叫 icon.png 的图片（建议正方形，如 64x64）
-    const iconPath = path.join(__dirname, 'icon.png');
+    const iconPath = path.join(__dirname, store.get('general.iconPath'));
     const { nativeImage } = require('electron');
     const image = nativeImage.createFromPath(iconPath);
-    if (image.isEmpty()) {
-        console.error("❌ 路径对但图标加载失败，请确认文件名为 icon.png 且格式正常");
-    }
     tray = new Tray(iconPath);
 
-    // 构建托盘的右键菜单
     const contextMenu = Menu.buildFromTemplate([
         {
-            label: '👀 显示 / 隐藏 OnePixel',
-            click: () => {
-                if (mainWindow.isVisible()) {
-                    mainWindow.hide();
-                } else {
-                    mainWindow.show();
-                }
-            }
-        },
-        { type: 'separator' }, // 优雅的分割线
-        {
-            label: '❌ 彻底退出',
-            click: () => {
-                tray.destroy(); // 退出前清理掉托盘图标
-                app.quit();     // 真正杀死所有进程
-            }
-        }
-    ]);
-
-    tray.setToolTip('OnePixel 桌面助手');
-    tray.setContextMenu(contextMenu);
-
-    // 彩蛋：双击托盘图标快速切换显示状态
-    tray.on('double-click', () => {
-        if (mainWindow.isVisible()) {
-            mainWindow.hide();
-        } else {
-            mainWindow.show();
-        }
-    });
-}
-
-// --- IPC 通信：接收来自 renderer.js 的信号 ---
-
-// 监听前端发来的“呼出右键菜单”请求
-ipcMain.on('show-context-menu', (event) => {
-    const template = [
-        {
-            label: '👀 隐藏桌宠 (去系统托盘找我)',
-            click: () => { mainWindow.hide(); } // 这里只做隐藏，不杀进程
+            label: store.get('tray.menuShowHide'),
+            click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show()
         },
         { type: 'separator' },
         {
-            label: '❌ 彻底退出',
-            click: () => {
-                if (tray) tray.destroy();
-                app.quit();
-            }
+            label: store.get('tray.menuQuit'),
+            click: quitApp
         }
+    ]);
+    tray.setToolTip(store.get('tray.tooltip'));
+    tray.setContextMenu(contextMenu);
+    tray.on('double-click', () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show());
+}
+
+ipcMain.on('show-context-menu', (event) => {
+    const template = [
+        { label: store.get('tray.menuHideOnly'), click: () => mainWindow.hide() },
+        { type: 'separator' },
+        { label: store.get('tray.menuQuit'), click: quitApp }
     ];
-
     const menu = Menu.buildFromTemplate(template);
-
-    // 在鼠标当前位置弹出这个原生菜单
     const win = BrowserWindow.fromWebContents(event.sender);
     menu.popup(win);
 });
 
-
-// --- Electron App 生命周期管理 ---
-const { spawn } = require('child_process');
-let pythonProcess = null;
-
 function startBackend() {
-    // 启动根目录 backend 下的 main.py
     const backendScript = path.join(__dirname, '..', 'backend', 'main.py');
     pythonProcess = spawn('python', [backendScript], { shell: true });
+
+    // 捕获 stdout 并发送到渲染进程
+    pythonProcess.stdout.on('data', (data) => {
+        const message = data.toString();
+        console.log(`[Python Backend Stdout]: ${message}`);
+        if (mainWindow) {
+            mainWindow.webContents.send('backend-status', message);
+        }
+    });
+
+    // 捕获 stderr 并发送到渲染进程
+    pythonProcess.stderr.on('data', (data) => {
+        const message = data.toString();
+        console.error(`[Python Backend Stderr]: ${message}`);
+        if (mainWindow) {
+            mainWindow.webContents.send('backend-status', `ERROR: ${message}`);
+        }
+    });
+
+    // 监听进程关闭事件
+    pythonProcess.on('close', (code) => {
+        console.log(`[Python Backend]: exited with code ${code}`);
+        if (mainWindow) {
+            mainWindow.webContents.send('backend-status', `后端服务已退出 (代码: ${code})`);
+        }
+    });
+
+    // 监听进程错误事件
+    pythonProcess.on('error', (err) => {
+        console.error(`[Python Backend]: failed to start process.`, err);
+        if (mainWindow) {
+            mainWindow.webContents.send('backend-status', `后端服务启动失败: ${err.message}`);
+        }
+    });
 }
 
-// 修改生命周期钩子
+// 🌟 生命钩子及快捷键注册
 app.whenReady().then(() => {
-    startBackend(); // 启动大脑
     createWindow();
+
+    // 🌟 注册 IPC 处理器
+    ipcMain.handle('get-setting', (event, key) => {
+        return store.get(key);
+    });
+
+    ipcMain.handle('set-setting', (event, key, value) => {
+        store.set(key, value);
+    });
+
+    // 注册全局快捷键
+    globalShortcut.register(store.get('general.globalShortcut'), () => {
+        console.log("📢 主进程听到了 Alt+V！通知前端...");
+        if (mainWindow) {
+            mainWindow.webContents.send('toggle-stt');
+        }
+    });
 });
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+    }
 });
 
 app.on('window-all-closed', () => {
@@ -137,3 +173,9 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
+
+app.on('will-quit', () => {
+    globalShortcut.unregisterAll(); // 清理快捷键
+});
+
+})();

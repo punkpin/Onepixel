@@ -1,0 +1,56 @@
+{
+  "name": "onepixel",
+  "version": "0.1.0",
+  "description": "OnePixel Desktop Pet",
+  "main": "frontend/main.js",
+  "scripts": {
+    "prestart": "npx kill-port 8000",
+    "start": "concurrently --kill-others \"npm run start-backend\" \"npm run start-frontend\"",
+    "start-frontend": "electron .",
+    "start-backend": "cd backend && python main.py",
+    "build": "electron-builder"
+  },
+  "author": "Clover",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "kill-port": "^2.0.1"
+  },
+  "build": {
+    "appId": "com.clover.pixel",
+    "productName": "OnePixel",
+    "directories": {
+      "output": "dist"
+    },
+    "asar": false,
+    "files": [
+      "frontend/**/*",
+      "models/**/*",
+      "icon.png",
+      "icon.ico"
+    ]
+  },
+  "extraResources": [
+    {
+      "from": "backend/dist/backend.exe",
+      "to": "backend.exe"
+    }
+  ],
+  "win": {
+    "icon": "icon.ico",
+    "target": [
+      "nsis"
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "electron-store": "^11.0.2"
+  }
+}
