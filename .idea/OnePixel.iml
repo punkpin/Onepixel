@@ -12,4 +12,11 @@
     <orderEntry type="library" name="pixi.js" level="application" />
     <orderEntry type="library" name="pixi-live2d-display" level="application" />
   </component>
+  <component name="TemplatesService">
+    <option name="TEMPLATE_FOLDERS">
+      <list>
+        <option value="$MODULE_DIR$/frontend/node_modules/.app-builder-lib-ppq8XVH1/templates" />
+      </list>
+    </option>
+  </component>
 </module>

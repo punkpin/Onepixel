@@ -1,50 +1,67 @@
-# Git Ignore for OnePixel Project
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.ipynb_checkpoints/
-.pytest_cache/
-.coverage
-.mypy_cache/
-.dmypy.json
-htmlcov/
-.nox/
-.egg-info/
-dist/
-build/
-# ModelScope cache and downloaded models
-backend/models/
-# Log files
-*.log
-*.txt
-backend/*.log
-
-# Node.js / Electron
+# =========================
+# 📦 Node.js & Electron (前端肉身)
+# =========================
+# 绝对不能传的黑洞文件夹（几万个小文件+超大 C++ 引擎）
 node_modules/
+frontend/node_modules/
+
+# npm 崩溃时的本地日志
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.idea/
-.vscode/
-package-lock.json # If you prefer yarn.lock or just don't want to commit this
-build/
+
+# Electron 打包后生成的几十兆/上百兆的安装包和临时文件
 dist/
-out/ # Electron build output
-electron-builder.env
-config.json # Electron-store config files, usually in user data dir
+dist-electron/
+out/
+build/
+release/
 
-# OS specific files
-.DS_Store
+# =========================
+# 🐍 Python & FastAPI (后端大脑)
+# =========================
+# Python 运行时的编译缓存（纯垃圾文件）
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境文件夹（绝对不能传！每个人电脑的 Python 路径都不一样）
+venv/
+.venv/
+env/
+backend/venv/
+backend/.venv/
+
+# =========================
+# 🤖 AI 模型与临时多模态文件 (OnePixel 专属防爆盾)
+# =========================
+# 拦截阿里 SenseVoice 这种动辄 1GB 的巨型本地听觉模型！
+backend/models/
+*.pt
+*.bin
+*.onnx
+*.safetensors
+
+# 拦截后端临时生成的猫娘 TTS 语音包（防止污染代码库）
+*.mp3
+*.wav
+temp_audio/
+
+# =========================
+# 🔐 敏感信息与机密配置
+# =========================
+# 你的 Kimi API Key 等绝对不能泄露到 GitHub 的环境变量文件！
+.env
+.env.local
+*.secret
+
+# =========================
+# 💻 操作系统与编辑器日志
+# =========================
+# VSCode 的本地配置（防止覆盖别人的习惯）
+.vscode/
+.idea/
+
+# Windows 和 Mac 的系统隐藏缩略图/索引文件
 Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
-*~
+.DS_Store
