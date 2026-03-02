@@ -57,6 +57,33 @@ class Brain:
 
         print(f"✅ 大脑加载完毕！当前载入人设: 小咪 (底层驱动: {self.model_name})")
 
+    def _read_webpage(self, url: str) -> str:
+        """核心魔法：无情撕碎 HTML，提取纯文本"""
+        print(f"🕸️ [网页捕获器]: 发现链接！正在潜入抓取: {url}")
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            # 设置 5 秒超时，防止死链卡住桌宠
+            response = requests.get(url, headers=headers, timeout=5)
+            response.encoding = response.apparent_encoding
+
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            # 干掉脚本和样式表
+            for script in soup(["script", "style"]):
+                script.extract()
+
+            text = soup.get_text(separator='\n')
+            clean_text = re.sub(r'\n+', '\n', text).strip()
+
+            print(f"✅ [网页捕获器]: 成功抓取 {len(clean_text)} 个字符！")
+            return clean_text[:4000]  # 最多截取 4000 字，防止撑爆大模型上下文
+
+        except Exception as e:
+            print(f"❌ [网页捕获器异常]: {e}")
+            return "（呜...这个网页好像加了防御或者超时了，小咪进不去喵...）"
+
     def _update_system_time(self):
         """内部方法：动态刷新系统时间，赋予小咪时间感知能力"""
         now = datetime.datetime.now()
@@ -91,12 +118,30 @@ class Brain:
     def think(self, user_text: str) -> str:
         """核心主线程：处理用户输入，驱动 ReAct 循环响应"""
         self._update_system_time()
+        url_pattern = r'(https?://[^\s]+)'
+        urls = re.findall(url_pattern, user_text)
+
+        if urls:
+            target_url = urls[0]
+            web_content = self._read_webpage(target_url)
+
+            user_text = f"""
+        主人发来了一个网页链接：{target_url}
+        我已经帮你把网页的文字内容抓取下来了，内容如下：
+        <web_content>
+        {web_content}
+        </web_content>
+
+        主人的原始要求是：{user_text}
+        请根据上述网页内容回答主人的要求，记得保持你的猫娘语气喵！
+        """
+            print(f"🧠 [大脑]: 已拦截链接并抓取内容，准备喂给大模型！")
+
         self.chat_history.append({"role": "user", "content": user_text})
 
         try:
             current_loop = 0
 
-            # 🌟 开启 Agent 自主思考循环
             while current_loop < self.max_loops:
                 request_params = {
                     "model": self.model_name,
