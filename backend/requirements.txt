@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+requests
+beautifulsoup4
+Pillow
+tavily-python
+edge-tts
+funasr
+modelscope
+speech_recognition
+pyaudio
